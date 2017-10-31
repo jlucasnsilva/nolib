@@ -2,7 +2,8 @@
 
 > What kind of lib throws everythin in the header file?
 > Nolib. Nolib at all.
->                               -- Gus Fring
+>
+> -- Gus Fring
 
 # License
 

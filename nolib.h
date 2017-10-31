@@ -464,6 +464,14 @@ bool n_SetLoaderSearchPath(const char *restrict path);
 // ========================================================
 
 
+#ifndef nG_DEFAULT_VELOCITY_DEAD_ZONE
+    #define nG_DEFAULT_VELOCITY_DEAD_ZONE 0.2f
+#endif
+
+#ifndef nG_DEFAULT_VELOCITY_DAMPING
+    #define nG_DEFAULT_VELOCITY_DAMPING 0.9f
+#endif
+
 typedef struct {
     // The category which this body belongs to.
     uint16_t mask;
@@ -477,8 +485,8 @@ typedef struct n_Body {
     n_Rect            hitbox;
     n_Rect            sensor;
     n_Vec2            velocity;
-    n_BodyType        type;
     n_CollisionFilter filter;
+    n_BodyType        type;
     uint16_t          data;
 } n_Body;
 
@@ -508,13 +516,12 @@ void n_Move(n_Body *restrict body, n_Vec2 acceleration, float dt);
 
 void n_Step(float dt);
 
-void n_DrawBodies(n_Camera *restrict cam);
-
-
 void n_SetCollisionHandler(n_CollisionHandlerFn handler);
 void n_SetCollisionResolutionHandler(n_CollisionHandlerFn handler);
 void n_SetTouchHandler(n_CollisionHandlerFn handler);
 void n_SetVelocityDamping(float damping);
+
+void n_DrawBodies(n_Camera *restrict cam);
 
 
 // ========================================================
@@ -524,14 +531,29 @@ void n_SetVelocityDamping(float damping);
 // ========================================================
 
 
-typedef void (* n_GameStepFn)();
-
+typedef void (* n_GameRuntimeFn)(void);
 typedef void (* n_GameEventHandler)(const SDL_Event *restrict e);
+
+typedef struct {
+    n_GameRuntimeFn    init;
+    n_GameRuntimeFn    step;
+    n_GameRuntimeFn    finalize;
+    n_GameEventHandler ehandler;
+} n_IGame;
+
+
+static inline void n_DestroyTexture(SDL_Texture** tex)
+{
+    if (tex && *tex) {
+        SDL_DestroyTexture(*tex);
+        *tex = NULL;
+    }
+}
 
 
 void n_Quit(void);
 
-void n_Run(uint32_t fps, n_GameStepFn gStepFn, n_GameEventHandler gEventHandler);
+void n_Run(uint32_t fps, n_IGame *restrict game);
 
 void n_SetBackgroundColor(const SDL_Color *restrict color);
 
@@ -889,7 +911,7 @@ void n_DrawTexture(
     float angle,
     SDL_RendererFlip flip
 ) {
-    if (!cam || !tex || !src || !dest) {
+    if (!cam || !tex) {
         return;
     }
 
@@ -899,7 +921,7 @@ void n_DrawTexture(
         nG_Renderer,
         tex,
         src,
-        &d,
+        dest ? &d : NULL,
         angle,
         NULL,
         flip
@@ -959,11 +981,13 @@ SDL_Texture* n_LoadTexture(const char *restrict path)
         n_Logf("path is too long (> %d).", nG_BaseLoaderPathMaxLen - 1);
     }
 
-    char         filepath[2 * nG_BaseLoaderPathMaxLen + 1];
+    char filepath[2 * nG_BaseLoaderPathMaxLen + 1];
+    
+    snprintf(filepath, 2 * nG_BaseLoaderPathMaxLen, "%s%s", nG_BaseLoaderPath, path);
+    
     SDL_Surface* s = IMG_Load(filepath);
     SDL_Texture* t = NULL;
 
-    snprintf(filepath, 2 * nG_BaseLoaderPathMaxLen, "%s%s", nG_BaseLoaderPath, path);
     
     if (s) {
         t = SDL_CreateTextureFromSurface(nG_Renderer, s);
@@ -1013,11 +1037,7 @@ bool n_SetLoaderSearchPath(const char *restrict path)
 // ========================================================
 
 
-#define nG_DEFAULT_VELOCITY_DEAD_ZONE    0.2f
-
-#define nG_NUMBER_OF_ROOMS               9
-
-#define nG_MAX_NUMBER_OF_BODIES_PER_ROOM 100
+#define nG_MEM_BUFFER_LEN 4096
 
 
 typedef struct n_BodyNode n_BodyNode;
@@ -1029,23 +1049,22 @@ struct n_BodyNode {
 };
 
 
-float nG_VelocityDeadZone;
-
-const n_BodyType n_BodyType_Sensor  = 0;
-const n_BodyType n_BodyType_Dynamic = 1 << 0;
-const n_BodyType n_BodyType_Kinetic = 1 << 1;
-const n_BodyType n_BodyType_Static  = 1 << 2;
-
-static n_CollisionHandlerFn n_CollisionHandler;
-static n_CollisionHandlerFn n_ResolutionHandler;
-static n_CollisionHandlerFn n_TouchHandler;
-
-static float n_MotionDamping;
+const n_BodyType n_BodyType_Sensor  = 1;
+const n_BodyType n_BodyType_Dynamic = 1 << 1;
+const n_BodyType n_BodyType_Kinetic = 1 << 2;
+const n_BodyType n_BodyType_Static  = 1 << 3;
 
 
-#define nG_MEM_BUFFER_LEN 4096
-static uint64_t nG_MemBuffer[nG_MEM_BUFFER_LEN]; // TODO 32kBytes, or 512 bodies
+static float nG_MotionDamping    = nG_DEFAULT_VELOCITY_DAMPING;
+static float nG_VelocityDeadZone = nG_DEFAULT_VELOCITY_DEAD_ZONE;
+
+static uint64_t            nG_MemBuffer[nG_MEM_BUFFER_LEN]; // 32kBytes, or 512 bodies
 static n_CircularAllocator nG_PhyAllocator;
+
+static n_CollisionHandlerFn nG_CollisionHandler;
+static n_CollisionHandlerFn nG_ResolutionHandler;
+static n_CollisionHandlerFn nG_TouchHandler;
+
 
 static struct {
     n_BodyNode* first;
@@ -1053,31 +1072,43 @@ static struct {
 } nG_BodyList;
 
 
+static void n_InitPhy();
+
 static void n_PassCollissionHandler(n_Body *restrict a, n_Body *restrict b);
 static void n_PassTouchHandler(n_Body *restrict a, n_Body *restrict b);
+
 static void n_MotionStep(float dt);
 static void n_ResolutionStep();
+
 static n_Vec2 n_Shift(n_Rect *restrict a, n_Rect *restrict b);
 
 
+void n_InitPhy()
+{
+    n_MakeCircularAllocator(&nG_PhyAllocator, nG_MemBuffer, sizeof(nG_MemBuffer), sizeof(n_BodyNode), true);
+
+    nG_BodyList.first = NULL;
+    nG_BodyList.last  = NULL;
+}
+
 void n_SetCollisionHandler(n_CollisionHandlerFn handler)
 {
-    n_CollisionHandler = handler;
+    nG_CollisionHandler = handler;
 }
 
 void n_SetCollisionResolutionHandler(n_CollisionHandlerFn handler)
 {
-    n_ResolutionHandler = handler;
+    nG_ResolutionHandler = handler;
 }
 
 void n_SetTouchHandler(n_CollisionHandlerFn handler)
 {
-    n_TouchHandler = handler;
+    nG_TouchHandler = handler;
 }
 
 void n_SetVelocityDamping(float damping)
 {
-    n_MotionDamping = damping;
+    nG_MotionDamping = damping;
 }
 
 
@@ -1092,20 +1123,10 @@ static inline bool n_CanCollide(n_Body *restrict a, n_Body *restrict b)
         && (b->filter.mask & a->filter.category);
 }
 
-static inline n_BodyNode* DerefBody(n_Body* restrict b)
+static inline n_BodyNode* n_DerefBody(n_Body* restrict b)
 {
     char* ptr = Ptr(b);
     return Ptr(ptr - sizeof(n_BodyNode) + sizeof(n_Body));
-}
-
-
-bool n_InitPhy() {
-    n_MakeCircularAllocator(&nG_PhyAllocator, nG_MemBuffer, sizeof(nG_MemBuffer), sizeof(n_BodyNode), true);
-
-    nG_BodyList.first = NULL;
-    nG_BodyList.last = NULL;
-
-    return true;
 }
 
 n_Body* n_CreateBody(
@@ -1176,7 +1197,9 @@ void n_DestroyBody(n_Body **restrict b)
 
 void n_Move(n_Body *restrict body, n_Vec2 acceleration, float dt)
 {
-    if (body && (body->type == n_BodyType_Dynamic || body->type == n_BodyType_Kinetic)) {
+    uint16_t movable = n_BodyType_Dynamic | n_BodyType_Kinetic;
+
+    if (body && (body->type & movable)) {
         body->velocity.x += acceleration.x * dt;
         body->velocity.y += acceleration.y * dt;
     }
@@ -1187,19 +1210,6 @@ void n_Step(float dt)
     n_MotionStep(dt);
     n_ResolutionStep();
 } // n_Step
-
-void n_DrawBodies(n_Camera *restrict cam)
-{
-    n_BodyNode* bn = nG_BodyList.first;
-
-    while (bn) {
-        n_SetDrawColor(0xFF, 0x00, 0x00, 0xFF);
-        n_DrawRect(cam, &bn->body.sensor);
-        n_SetDrawColor(0x00, 0x00, 0x00, 0xFF);
-        n_DrawRect(cam, &bn->body.hitbox);
-        bn = bn->next;
-    }
-}
 
 static void n_PassCollissionHandler(n_Body *restrict a, n_Body *restrict b)
 {
@@ -1257,8 +1267,8 @@ static void n_MotionStep(float dt)
         b->sensor.x += b->velocity.x * dt;
         b->sensor.y += b->velocity.y * dt;
 
-        b->velocity.x *= n_MotionDamping;
-        b->velocity.y *= n_MotionDamping;
+        b->velocity.x *= nG_MotionDamping;
+        b->velocity.y *= nG_MotionDamping;
 
         if (IsDeadVelocity(b->velocity.x)) {
             b->velocity.x = 0.0f;
@@ -1359,6 +1369,19 @@ static void n_ResolutionStep()
     } // while
 } // function
 
+void n_DrawBodies(n_Camera *restrict cam)
+{
+    n_BodyNode* bn = nG_BodyList.first;
+
+    while (bn) {
+        n_SetDrawColor(0xFF, 0x00, 0x00, 0xFF);
+        n_DrawRect(cam, &bn->body.sensor);
+        n_SetDrawColor(0x00, 0x00, 0x00, 0xFF);
+        n_DrawRect(cam, &bn->body.hitbox);
+        bn = bn->next;
+    }
+}
+
 
 // ========================================================
 //
@@ -1369,7 +1392,12 @@ static void n_ResolutionStep()
 
 static bool n_ShouldQuit = false;
 
-static SDL_Color n_DefaultBGColor;
+static SDL_Color n_DefaultBGColor = SDL_Color(
+    .r = 0x00,
+    .g = 0x00,
+    .b = 0x00,
+    .a = 0xFF,
+);
 
 
 void n_Quit(void)
@@ -1377,7 +1405,7 @@ void n_Quit(void)
     n_ShouldQuit = true;
 }
 
-void n_Run(uint32_t fps, n_GameStepFn gStepFn, n_GameEventHandler gEventHandler)
+void n_Run(uint32_t fps, n_IGame *restrict game)
 {
     const int FRAME_TIME = Int(1000.0 / fps);
     uint32_t  curr  = 0;
@@ -1385,12 +1413,7 @@ void n_Run(uint32_t fps, n_GameStepFn gStepFn, n_GameEventHandler gEventHandler)
     uint32_t  delta = 0;
     SDL_Event e;
 
-    n_DefaultBGColor = SDL_Color(
-        .r = 0x00,
-        .g = 0x00,
-        .b = 0x00,
-        .a = 0xFF,
-    );
+    game->init();
 
     while (!n_ShouldQuit) {
         curr  = SDL_GetTicks();
@@ -1411,16 +1434,18 @@ void n_Run(uint32_t fps, n_GameStepFn gStepFn, n_GameEventHandler gEventHandler)
                     n_ShouldQuit = true;
                     break;
                 default:
-                    gEventHandler(&e);
+                    game->ehandler(&e);
                     break;
                 }
             }
 
-            gStepFn();
+            game->step();
 
             n_Present();
         }
     }
+
+    game->finalize();
 }
 
 void n_SetBackgroundColor(const SDL_Color *restrict color)
@@ -1485,6 +1510,8 @@ bool n_Init(const char* gameName, int windowWidth, int windowHeight, float ppm)
     }
 
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
+
+    n_InitPhy();
     return true;
 }
 

@@ -1,5 +1,5 @@
 #define _NOLIB_INCLUDE_IMPL_
-#include "nolib.h"
+#include "../nolib.h"
 
 
 n_Camera  cam = n_Camera();
@@ -12,7 +12,7 @@ n_Rect r3  = n_Rect(.x = 11, .y = 11, .w = 5, .h = 5);
 n_Rect r4  = n_Rect(.x = 16, .y = 16, .w = 5, .h = 5);
 
 
-void step(const SDL_Event *restrict e)
+void step(void)
 {
     n_SetRendererDrawColor(SDL_Color(.r = 0xFF, .g = 0xFF, .b = 0xFF, .a = 0xFF));
     n_DrawFilledRect(&cam, &r1);
