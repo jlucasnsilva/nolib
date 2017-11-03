@@ -13,9 +13,9 @@ static SDL_Rect EXPLOSION_TEX_2      = SDL_Rect(.x = 64, .y = 64, .w = 32, .h = 
 static SDL_Rect EXPLOSION_TEX_3      = SDL_Rect(.x = 96, .y = 64, .w = 32, .h = 32);
 
 
-void Init(void);
-void Step(void);
-void Finalize(void);
+void Init(n_GameTime gameTime);
+void Step(n_GameTime gameTime);
+void Finalize(n_GameTime gameTime);
 void EventHandler(const SDL_Event *restrict e);
 
 
@@ -44,13 +44,13 @@ static SDL_Texture* tex;
 static n_Camera     cam;
 
 
-void Init(void)
+void Init(n_GameTime gameTime)
 {
     tex = n_LoadTexture("space.png");
     cam = n_Camera();
 }
 
-void Step(void)
+void Step(n_GameTime gameTime)
 {
     n_Rect d = n_Rect(.x = 0, .y = 1, .w = 1, .h = 1);
 
@@ -65,7 +65,7 @@ void Step(void)
     n_DrawTexture(&cam, tex, &EXPLOSION_TEX_3,      &d, 0.0f, SDL_FLIP_NONE);
 }
 
-void Finalize(void)
+void Finalize(n_GameTime gameTime)
 {
     n_DestroyTexture(&tex);
 }

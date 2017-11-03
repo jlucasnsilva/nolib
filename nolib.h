@@ -170,6 +170,29 @@ typedef struct {
     bool                     isStatic;
 } n_CircularAllocator;
 
+// - Stack allocator ----------------------------------------------------------
+//
+// Memory layout:
+//
+// 15 |  .  |
+// 14 |  .  |
+// 13 |  .  |
+// 12 |_____|
+// 11 |__6__| <- index of block 1 first position
+// 10 |     | <- end of block 1
+//  9 |     |
+//  8 |     |
+//  7 |     |
+//  6 |_____|
+//  5 |__1__| <- beggining of block 1
+//  4 |     | <- index of block 0's first position
+//  3 |     | <- end of block 0
+//  2 |_____|
+//  1 |__0__| <- beggining of block 0
+//  0 |     | <- dead byte
+//       #
+//
+// ----------------------------------------------------------------------------
 typedef struct {
     uint64_t* buffer;     // a 8-bytes-aligned chunck of memory
     size_t    bufferSize; // the length of the buffer
@@ -178,16 +201,14 @@ typedef struct {
 } n_StackAllocator;
 
 
-/**
- * Initializes a new Circular Allocator.
- *
- * \param a a existing n_CircularAllocator.
- * \param buffer an array to be used as a back buffer.
- * \param bufferSize the size of the buffer in bytes.
- * \param objSize size of the object to be stored.
- * \param isStatic if 'false', when the n_CircularAllocator is unmade
- *                 or deleted the back buffer will be freed.
- */
+// Initializes a new Circular Allocator.
+//
+// \param a a existing n_CircularAllocator.
+// \param buffer an array to be used as a back buffer.
+// \param bufferSize the size of the buffer in bytes.
+// \param objSize size of the object to be stored.
+// \param isStatic if 'false', when the n_CircularAllocator is unmade
+//                 or deleted the back buffer will be freed.
 bool n_MakeCircularAllocator(
     n_CircularAllocator *restrict a,
     uint64_t*                     buffer,
@@ -212,79 +233,50 @@ void* n_CircularAllocatorAlloc(n_CircularAllocator *restrict a);
 bool n_CircularAllocatorFree(n_CircularAllocator *restrict a, void *restrict ptr);
 
 
-// ----------------------------------------------------------------------------
-// - Stack allocator functions ------------------------------------------------
-//
-// Memory layout:
-//
-// 15 |  .  |
-// 14 |  .  |
-// 13 |  .  |
-// 12 |_____|
-// 11 |__6__| <- index of block 1 first position
-// 10 |     | <- end of block 1
-//  9 |     |
-//  8 |     |
-//  7 |     |
-//  6 |_____|
-//  5 |__1__| <- beggining of block 1
-//  4 |     | <- index of block 0's first position
-//  3 |     | <- end of block 0
-//  2 |_____|
-//  1 |__0__| <- beggining of block 0
-//  0 |     | <- dead byte
-//       #
-//
-// ----------------------------------------------------------------------------
-
-
-bool n_MakeStackAllocator(n_StackAllocator *restrict a,
- uint64_t*                  buffer,
- size_t                     bufferLength,
- bool                       isStatic);
+bool n_MakeStackAllocator(
+    n_StackAllocator *restrict a,
+    uint64_t*                  buffer,
+    size_t                     bufferLength,
+    bool                       isStatic
+);
 
 void n_UnmakeStackAllocator(n_StackAllocator *restrict a);
 
-/**
-* Allocates a stack allocator handle.
-*
-* \param buffer a 8-byte-aligned chunk of memory (global static or
-*               malloced) that will be used as memory space for this
-*               stack memory handle;
-* \param bufferLength the length of the buffer/array passed in (not
-in bytes, but in '8-bytes');
-* \param isStatic tells if the buffer is a global static array or
-*                 (false) it was malloced. This flag is later used
-*                 by 'n_StackAllocator_delete': if it is false, it
-*                 will free;
-*/
-n_StackAllocator* n_NewStackAllocator(uint64_t* buffer,
-             size_t    bufferLength,
-             bool      isStatic);
-/**
-* Frees the memory allocated by 'n_StackAllocator_new'. If 'is_static'
-* was set to false, stdlib/free will be called on the buffer.
-*
-* \param a a stack allocator handle;
-*/
+// Allocates a stack allocator handle.
+//
+// \param buffer a 8-byte-aligned chunk of memory (global static or
+//               malloced) that will be used as memory space for this
+//               stack memory handle;
+// \param bufferLength the length of the buffer/array passed in (not
+//                     in bytes, but in '8-bytes');
+// \param isStatic tells if the buffer is a global static array or
+//                 (false) it was malloced. This flag is later used
+//                 by 'n_StackAllocator_delete': if it is false, it
+//                 will free;
+n_StackAllocator* n_NewStackAllocator(
+    uint64_t* buffer,
+    size_t    bufferLength,
+    bool      isStatic
+);
+
+// Frees the memory allocated by 'n_StackAllocator_new'. If 'is_static'
+// was set to false, stdlib/free will be called on the buffer.
+//
+// \param a a stack allocator handle;
 void n_DeleteStackAllocator(n_StackAllocator **restrict a);
 
-/**
-* Allocates 'size' bytes and returns a pointer to the first. Internally
-* it rounds 'size' to the next 8-byte block (for instance, for 13 bytes 
-* internally it'll be allocated 18 bytes, 21 will be 24 and so on) plus
-* 8 bytes for stack's internals.
-*
-* \param a a stack allocator handle;
-* \param size the size in bytes of the chuck to be allocated;
-*/
+// Allocates 'size' bytes and returns a pointer to the first. Internally
+// it rounds 'size' to the next 8-byte block (for instance, for 13 bytes 
+// internally it'll be allocated 18 bytes, 21 will be 24 and so on) plus
+// 8 bytes for stack's internals.
+//
+// \param a a stack allocator handle;
+// \param size the size in bytes of the chuck to be allocated;
 void* n_StackAllocatorAlloc(n_StackAllocator *restrict a, size_t size);
 
-/**
-* Frees the last allocated block of memory.
-*
-* \param a a stack allocator handle;
-*/
+// Frees the last allocated block of memory.
+//
+// \param a a stack allocator handle;
 void n_StackAllocatorFree(n_StackAllocator *restrict a);
 
 
@@ -331,18 +323,18 @@ typedef struct {
 } n_Sprite;
 
 
-#define n_Animation(...) ((n_Animation) { \
-    .tex           = NULL,                \
-    .frames        = NULL,                \
-    .dest          = n_Rect(),            \
-    .size          = 0,                   \
-    .index         = 0,                   \
-    .frameDuration = 0.0f,                \
-    .totalTime     = 0.0f,                \
-    .angle         = 0.0f,                \
-    .angleInc      = 0.0f,                \
-    .flip          = SDL_FLIP_NONE,       \
-    __VA_ARGS__                           \
+#define n_Animation(...) ((n_Animation) {    \
+    .tex           = NULL,                   \
+    .frames        = NULL,                   \
+    .dest          = n_Rect(.w = 1, .h = 1), \
+    .size          = 0,                      \
+    .index         = 0,                      \
+    .frameDuration = 0.0f,                   \
+    .totalTime     = 0.0f,                   \
+    .angle         = 0.0f,                   \
+    .angleInc      = 0.0f,                   \
+    .flip          = SDL_FLIP_NONE,          \
+    __VA_ARGS__                              \
 })
 
 #define n_Camera(...) ((n_Camera) { \
@@ -479,9 +471,22 @@ typedef struct {
     uint16_t category;
 } n_CollisionFilter;
 
-typedef uint16_t n_BodyType;
+typedef enum {
+    n_BodyType_Sensor  = 1,
+    n_BodyType_Dynamic = 1 << 1,
+    n_BodyType_Kinetic = 1 << 2,
+    n_BodyType_Static  = 1 << 3
+} n_BodyType;
 
-typedef struct n_Body {
+typedef enum {
+    n_SensorActivity_None   = 0,
+    n_SensorActivity_Above  = 1,
+    n_SensorActivity_Bellow = 1 << 1,
+    n_SensorActivity_Left   = 1 << 2,
+    n_SensorActivity_Right  = 1 << 3
+} n_SensorActivity;
+
+typedef struct {
     n_Rect            hitbox;
     n_Rect            sensor;
     n_Vec2            velocity;
@@ -490,16 +495,13 @@ typedef struct n_Body {
     uint16_t          data;
 } n_Body;
 
-typedef void (* n_CollisionHandlerFn)(n_Body *restrict a, n_Body *restrict b);
+typedef struct {
+    n_Body*          a;
+    n_Body*          b;
+    n_SensorActivity aSensorActivity;
+} n_Collision;
 
-
-extern float nG_VelocityDeadZone;
-
-extern const n_BodyType n_BodyType_Sensor;  // can't move and don't collide
-extern const n_BodyType n_BodyType_Dynamic; // move, collide, resolve collision
-extern const n_BodyType n_BodyType_Kinetic; // move, collide, but don't resolve
-extern const n_BodyType n_BodyType_Static;  // can't move, but collide
-
+typedef void (* n_CollisionHandlerFn)(n_Collision coll);
 
 n_Body* n_CreateBody(
     n_Vec2            pos,
@@ -510,16 +512,17 @@ n_Body* n_CreateBody(
     uint16_t          data
 );
 
-void n_DestroyBody(n_Body **restrict b);
+void n_Accelerate(n_Body *restrict body, n_Vec2 acceleration, float dt);
 
-void n_Move(n_Body *restrict body, n_Vec2 acceleration, float dt);
+void n_DestroyBody(n_Body **restrict b);
 
 void n_Step(float dt);
 
 void n_SetCollisionHandler(n_CollisionHandlerFn handler);
 void n_SetCollisionResolutionHandler(n_CollisionHandlerFn handler);
-void n_SetTouchHandler(n_CollisionHandlerFn handler);
+void n_SetSensorCollisionHandler(n_CollisionHandlerFn handler);
 void n_SetVelocityDamping(float damping);
+void n_SetVelocityDeadzone(float v);
 
 void n_DrawBodies(n_Camera *restrict cam);
 
@@ -531,8 +534,13 @@ void n_DrawBodies(n_Camera *restrict cam);
 // ========================================================
 
 
-typedef void (* n_GameRuntimeFn)(void);
+typedef struct {
+    float deltaTime;
+    float totalTime;
+} n_GameTime;
+
 typedef void (* n_GameEventHandler)(const SDL_Event *restrict e);
+typedef void (* n_GameRuntimeFn)(n_GameTime gameTime);
 
 typedef struct {
     n_GameRuntimeFn    init;
@@ -1040,6 +1048,10 @@ bool n_SetLoaderSearchPath(const char *restrict path)
 #define nG_MEM_BUFFER_LEN 4096
 
 
+static void n_PassCollissionHandler(n_Collision coll);
+static void n_PassResolutionHandler(n_Collision coll);
+
+
 typedef struct n_BodyNode n_BodyNode;
 
 struct n_BodyNode {
@@ -1049,21 +1061,15 @@ struct n_BodyNode {
 };
 
 
-const n_BodyType n_BodyType_Sensor  = 1;
-const n_BodyType n_BodyType_Dynamic = 1 << 1;
-const n_BodyType n_BodyType_Kinetic = 1 << 2;
-const n_BodyType n_BodyType_Static  = 1 << 3;
-
-
 static float nG_MotionDamping    = nG_DEFAULT_VELOCITY_DAMPING;
 static float nG_VelocityDeadZone = nG_DEFAULT_VELOCITY_DEAD_ZONE;
 
 static uint64_t            nG_MemBuffer[nG_MEM_BUFFER_LEN]; // 32kBytes, or 512 bodies
 static n_CircularAllocator nG_PhyAllocator;
 
-static n_CollisionHandlerFn nG_CollisionHandler;
-static n_CollisionHandlerFn nG_ResolutionHandler;
-static n_CollisionHandlerFn nG_TouchHandler;
+static n_CollisionHandlerFn nG_CollisionHandler       = &n_PassCollissionHandler;
+static n_CollisionHandlerFn nG_SensorCollisionHandler = &n_PassCollissionHandler;
+static n_CollisionHandlerFn nG_ResolutionHandler      = &n_PassResolutionHandler;
 
 
 static struct {
@@ -1072,10 +1078,34 @@ static struct {
 } nG_BodyList;
 
 
-static void n_InitPhy();
+static inline bool n_CanCollide(n_Body *restrict a, n_Body *restrict b)
+{
+    return (a->filter.mask & b->filter.category)
+        && (b->filter.mask & a->filter.category);
+}
 
-static void n_PassCollissionHandler(n_Body *restrict a, n_Body *restrict b);
-static void n_PassTouchHandler(n_Body *restrict a, n_Body *restrict b);
+static inline n_BodyNode* n_DerefBody(n_Body* restrict b)
+{
+    char* ptr = Ptr(b);
+    return Ptr(ptr - sizeof(n_BodyNode) + sizeof(n_Body));
+}
+
+static inline n_SensorActivity n_GetSensorActivity(n_Body *restrict a, n_Body *restrict b)
+{
+    n_SensorActivity activity = n_SensorActivity_None;
+
+    // TODO coll.aSensorActivity
+
+    return activity;
+}
+
+static inline bool n_IsDeadVelocity(float v)
+{
+    return v < nG_VelocityDeadZone && v > -nG_VelocityDeadZone;
+}
+
+
+static void n_InitPhy();
 
 static void n_MotionStep(float dt);
 static void n_ResolutionStep();
@@ -1091,42 +1121,15 @@ void n_InitPhy()
     nG_BodyList.last  = NULL;
 }
 
-void n_SetCollisionHandler(n_CollisionHandlerFn handler)
-{
-    nG_CollisionHandler = handler;
-}
 
-void n_SetCollisionResolutionHandler(n_CollisionHandlerFn handler)
+void n_Accelerate(n_Body *restrict body, n_Vec2 acceleration, float dt)
 {
-    nG_ResolutionHandler = handler;
-}
+    uint16_t movable = n_BodyType_Dynamic | n_BodyType_Kinetic;
 
-void n_SetTouchHandler(n_CollisionHandlerFn handler)
-{
-    nG_TouchHandler = handler;
-}
-
-void n_SetVelocityDamping(float damping)
-{
-    nG_MotionDamping = damping;
-}
-
-
-static inline bool n_IsDeadVelocity(float v)
-{
-    return v < nG_VelocityDeadZone && v > -nG_VelocityDeadZone;
-}
-
-static inline bool n_CanCollide(n_Body *restrict a, n_Body *restrict b)
-{
-    return (a->filter.mask & b->filter.category)
-        && (b->filter.mask & a->filter.category);
-}
-
-static inline n_BodyNode* n_DerefBody(n_Body* restrict b)
-{
-    char* ptr = Ptr(b);
-    return Ptr(ptr - sizeof(n_BodyNode) + sizeof(n_Body));
+    if (body && (body->type & movable) == body->type) {
+        body->velocity.x += acceleration.x * dt;
+        body->velocity.y += acceleration.y * dt;
+    }
 }
 
 n_Body* n_CreateBody(
@@ -1156,7 +1159,7 @@ n_Body* n_CreateBody(
             .w = size.x + 2 * sensorPadding.x,
             .h = size.y + 2 * sensorPadding.y
         ),
-        .velocity = Vec2(0.0f, 0.0f),
+        .velocity = n_Vec2(.x = 0.0f, .y = 0.0f),
         .filter   = filter,
         .type     = type,
         .data     = data
@@ -1179,7 +1182,7 @@ n_Body* n_CreateBody(
 void n_DestroyBody(n_Body **restrict b)
 {
     if (b && *b){
-        n_BodyNode* bn = DerefBody(*b);
+        n_BodyNode* bn = n_DerefBody(*b);
 
         if (bn == nG_BodyList.first) {
             nG_BodyList.first = nG_BodyList.first->next;
@@ -1195,33 +1198,49 @@ void n_DestroyBody(n_Body **restrict b)
     }
 }
 
-void n_Move(n_Body *restrict body, n_Vec2 acceleration, float dt)
-{
-    uint16_t movable = n_BodyType_Dynamic | n_BodyType_Kinetic;
-
-    if (body && (body->type & movable)) {
-        body->velocity.x += acceleration.x * dt;
-        body->velocity.y += acceleration.y * dt;
-    }
-}
-
 void n_Step(float dt)
 {
     n_MotionStep(dt);
     n_ResolutionStep();
 } // n_Step
 
-static void n_PassCollissionHandler(n_Body *restrict a, n_Body *restrict b)
+
+void n_SetCollisionHandler(n_CollisionHandlerFn handler)
+{
+    nG_CollisionHandler = handler;
+}
+
+void n_SetCollisionResolutionHandler(n_CollisionHandlerFn handler)
+{
+    nG_ResolutionHandler = handler;
+}
+
+void n_SetSensorCollisionHandler(n_CollisionHandlerFn handler)
+{
+    nG_SensorCollisionHandler = handler;
+}
+
+void n_SetVelocityDamping(float damping)
+{
+    nG_MotionDamping = damping;
+}
+
+void n_SetVelocityDeadzone(float v)
+{
+    nG_VelocityDeadZone = v;
+}
+
+static void n_PassCollissionHandler(n_Collision coll)
 {
     // printf("body[%d] collided with body [%d]\n", a->Data, b->Data);
 }
 
-static void n_PassTouchHandler(n_Body *restrict a, n_Body *restrict b)
+static void n_PassResolutionHandler(n_Collision coll)
 {
     // printf("sensor[%d] touched sensor [%d]\n", a->Data, b->Data);
 }
 
-static n_Vec2 Shift(n_Rect *restrict a, n_Rect *restrict b)
+static n_Vec2 n_Shift(n_Rect *restrict a, n_Rect *restrict b)
 {
     n_Vec2 shift;
 
@@ -1256,11 +1275,10 @@ static n_Vec2 Shift(n_Rect *restrict a, n_Rect *restrict b)
 static void n_MotionStep(float dt)
 {
     n_BodyNode* bn = nG_BodyList.first;
-    n_Body*   b  = NULL;
+    n_Body*     b  = NULL;
 
     while (bn) {
         b  = &bn->body;
-        bn = bn->next;
 
         b->hitbox.x += b->velocity.x * dt;
         b->hitbox.y += b->velocity.y * dt;
@@ -1270,13 +1288,15 @@ static void n_MotionStep(float dt)
         b->velocity.x *= nG_MotionDamping;
         b->velocity.y *= nG_MotionDamping;
 
-        if (IsDeadVelocity(b->velocity.x)) {
+        if (n_IsDeadVelocity(b->velocity.x)) {
             b->velocity.x = 0.0f;
         }
 
-        if (IsDeadVelocity(b->velocity.y)) {
+        if (n_IsDeadVelocity(b->velocity.y)) {
             b->velocity.y = 0.0f;
         }
+
+        bn = bn->next;
     }
 }
 
@@ -1289,33 +1309,43 @@ static void n_ResolutionStep()
     }
 
     n_BodyNode* bn2 = nG_BodyList.first->next;
-    n_Body*   a   = NULL;
-    n_Body*   b   = NULL;
+    n_Body*     a   = NULL;
+    n_Body*     b   = NULL;
 
     while (bn1) {
         a = &bn1->body;
         while (bn2) {
             b = &bn2->body;
 
-            if (CanCollide(a, b)) {
+            if (n_CanCollide(a, b)) {
+                n_Collision coll = {
+                    .a               = a,
+                    .b               = b,
+                    .aSensorActivity = n_SensorActivity_None
+                };
+
                 if (a->type == n_BodyType_Sensor || a->type == n_BodyType_Sensor) {
-                    n_TouchHandler(a, b);
+                    coll.aSensorActivity = n_GetSensorActivity(a, b);
+                    nG_SensorCollisionHandler(coll);
                     continue;
                 }
 
-                if (RectOverlap(&a->hitbox, &b->sensor) ||
-                    RectOverlap(&a->sensor, &b->hitbox))
+                if (n_RectsOverlap(&a->hitbox, &b->sensor) ||
+                    n_RectsOverlap(&a->sensor, &b->hitbox))
                 {
-                    n_TouchHandler(a, b);
+                    coll.aSensorActivity = n_GetSensorActivity(a, b);
+                    nG_SensorCollisionHandler(coll);
                 }
 
-                if (RectOverlap(&a->hitbox, &b->hitbox)) {
-                    n_Vec2 shift = Shift(&a->hitbox, &b->hitbox);
+                if (n_RectsOverlap(&a->hitbox, &b->hitbox)) {
+                    n_Vec2 shift = n_Shift(&a->hitbox, &b->hitbox);
 
-                    n_CollisionHandler(a, b);
+                    nG_CollisionHandler(coll);
 
                     switch (a->type)
                     {
+                    case n_BodyType_Sensor:
+                        break;
                     case n_BodyType_Dynamic:
                         if (b->type == n_BodyType_Dynamic) {
                             a->hitbox.x += (shift.x / 2.0f);
@@ -1358,7 +1388,7 @@ static void n_ResolutionStep()
                         break;
                     } // swicth
 
-                    n_ResolutionHandler(a, b);
+                    nG_ResolutionHandler(coll);
                 } // if[overlap]
             } // if[can collide]
 
@@ -1371,12 +1401,14 @@ static void n_ResolutionStep()
 
 void n_DrawBodies(n_Camera *restrict cam)
 {
-    n_BodyNode* bn = nG_BodyList.first;
+    SDL_Color   sensorColor = {0xFF, 0x00, 0x00, 0xFF};
+    SDL_Color   bodyColor   = {0x00, 0x00, 0x00, 0xFF};
+    n_BodyNode* bn          = nG_BodyList.first;
 
     while (bn) {
-        n_SetDrawColor(0xFF, 0x00, 0x00, 0xFF);
+        n_SetRendererDrawColor(sensorColor);
         n_DrawRect(cam, &bn->body.sensor);
-        n_SetDrawColor(0x00, 0x00, 0x00, 0xFF);
+        n_SetRendererDrawColor(bodyColor);
         n_DrawRect(cam, &bn->body.hitbox);
         bn = bn->next;
     }
@@ -1408,12 +1440,13 @@ void n_Quit(void)
 void n_Run(uint32_t fps, n_IGame *restrict game)
 {
     const int FRAME_TIME = Int(1000.0 / fps);
+    n_GameTime gt = {0.0f, 0.0f};
     uint32_t  curr  = 0;
     uint32_t  prev  = 0;
     uint32_t  delta = 0;
     SDL_Event e;
 
-    game->init();
+    game->init(gt);
 
     while (!n_ShouldQuit) {
         curr  = SDL_GetTicks();
@@ -1439,13 +1472,15 @@ void n_Run(uint32_t fps, n_IGame *restrict game)
                 }
             }
 
-            game->step();
+            gt.deltaTime = Float(delta) / 1000.0f;
+            gt.totalTime = Float(curr) / 1000.0f;
+            game->step(gt);
 
             n_Present();
         }
     }
 
-    game->finalize();
+    game->finalize(gt);
 }
 
 void n_SetBackgroundColor(const SDL_Color *restrict color)
