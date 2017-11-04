@@ -90,6 +90,7 @@ typedef struct {
 
 
 #define n_Vec2(...) ((n_Vec2) {.x = 0.0f, .y = 0.0f, __VA_ARGS__})
+
 #define n_Rect(...) ((n_Rect) {.x = 0.0f, .y = 0.0f, .w = 0.0f, .h = 0.0f, __VA_ARGS__})
 
 
@@ -365,6 +366,9 @@ void n_CameraJail(n_Camera *restrict cam, const n_Rect *restrict cage, n_Vec2 po
 void n_ClearBackground(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
 
+void n_DeleteAnimation(n_Animation** a);
+
+
 void n_DrawAnimation(const n_Camera *restrict cam, const n_Animation *restrict a);
 
 void n_DrawFilledRect(const n_Camera *restrict cam, const n_Rect *restrict rect);
@@ -382,6 +386,12 @@ void n_DrawTexture(
     SDL_RendererFlip flip
 );
 
+n_Animation* n_NewAnimation(
+    SDL_Texture* tex,
+    SDL_Rect*    frames,
+    uint32_t     nOfFrames,
+    float        frameDuration
+);
 
 // Renders the scenes.
 void n_Present(void);
@@ -444,6 +454,15 @@ typedef enum {
 // ========================================================
 
 
+static inline void n_DeleteTexture(SDL_Texture** tex)
+{
+    if (tex && *tex) {
+        SDL_DestroyTexture(*tex);
+        *tex = NULL;
+    }
+}
+
+
 SDL_Texture* n_LoadTexture(const char *restrict name);
 
 bool n_SetLoaderSearchPath(const char *restrict path);
@@ -503,7 +522,12 @@ typedef struct {
 
 typedef void (* n_CollisionHandlerFn)(n_Collision coll);
 
-n_Body* n_CreateBody(
+
+void n_Accelerate(n_Body *restrict body, n_Vec2 acceleration, float dt);
+
+void n_DeleteBody(n_Body **restrict b);
+
+n_Body* n_NewBody(
     n_Vec2            pos,
     n_Vec2            size,
     n_Vec2            sensorPadding,
@@ -512,11 +536,7 @@ n_Body* n_CreateBody(
     uint16_t          data
 );
 
-void n_Accelerate(n_Body *restrict body, n_Vec2 acceleration, float dt);
-
-void n_DestroyBody(n_Body **restrict b);
-
-void n_Step(float dt);
+void n_PhysicsStep(float dt);
 
 void n_SetCollisionHandler(n_CollisionHandlerFn handler);
 void n_SetCollisionResolutionHandler(n_CollisionHandlerFn handler);
@@ -548,15 +568,6 @@ typedef struct {
     n_GameRuntimeFn    finalize;
     n_GameEventHandler ehandler;
 } n_IGame;
-
-
-static inline void n_DestroyTexture(SDL_Texture** tex)
-{
-    if (tex && *tex) {
-        SDL_DestroyTexture(*tex);
-        *tex = NULL;
-    }
-}
 
 
 void n_Quit(void);
@@ -871,6 +882,14 @@ void n_ClearBackground(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
     SDL_RenderClear(nG_Renderer);
 }
 
+void n_DeleteAnimation(n_Animation** a)
+{
+    if (a && *a) {
+        n_Delete((*a)->frames);
+        n_Delete(*a);
+    }
+}
+
 void n_DrawAnimation(const n_Camera *restrict cam, const n_Animation *restrict a) {
     if (!cam || !a) {
         return;
@@ -934,6 +953,50 @@ void n_DrawTexture(
         NULL,
         flip
     );
+}
+
+n_Animation* n_NewAnimation(
+    SDL_Texture* tex,
+    SDL_Rect*    frames,
+    uint32_t     nOfFrames,
+    float        frameDuration
+) {
+    if (!tex || !frames || nOfFrames < 2) {
+        // TODO error message
+        return NULL;
+    }
+
+    SDL_Rect* fs = n_New(SDL_Rect, nOfFrames);
+
+    if (!fs) {
+        // TODO error message
+        return NULL;
+    }
+
+    n_Animation* a = n_New(n_Animation, 1);
+
+    if (!a) {
+        // TODO error message
+        n_Delete(fs);
+        return NULL;
+    }
+
+    memcpy(fs, frames, nOfFrames * sizeof(SDL_Rect));
+
+    *a = n_Animation(
+        .tex           = tex,
+        .frames        = fs,
+        .dest          = n_Rect(.x = 1.0f, .y = 1.0f, .w = 1.0f, .h = 1.0f),
+        .size          = nOfFrames,
+        .index         = 0,
+        .frameDuration = frameDuration,
+        .totalTime     = 0,
+        .angle         = 0,
+        .angleInc      = 0,
+        .flip          = SDL_FLIP_NONE
+    );
+
+    return a;
 }
 
 void n_Present(void)
@@ -1132,7 +1195,26 @@ void n_Accelerate(n_Body *restrict body, n_Vec2 acceleration, float dt)
     }
 }
 
-n_Body* n_CreateBody(
+void n_DeleteBody(n_Body **restrict b)
+{
+    if (b && *b){
+        n_BodyNode* bn = n_DerefBody(*b);
+
+        if (bn == nG_BodyList.first) {
+            nG_BodyList.first = nG_BodyList.first->next;
+        } else if (bn == nG_BodyList.last) {
+            nG_BodyList.last = nG_BodyList.last->prev;
+        } else {
+            bn->next->prev = bn->prev;
+            bn->prev->next = bn->next;
+        }
+
+        n_CircularAllocatorFree(&nG_PhyAllocator, bn);
+        *b = NULL;
+    }
+}
+
+n_Body* n_NewBody(
     n_Vec2            pos,
     n_Vec2            size,
     n_Vec2            sensorPadding,
@@ -1179,26 +1261,7 @@ n_Body* n_CreateBody(
     return &bn->body;
 }
 
-void n_DestroyBody(n_Body **restrict b)
-{
-    if (b && *b){
-        n_BodyNode* bn = n_DerefBody(*b);
-
-        if (bn == nG_BodyList.first) {
-            nG_BodyList.first = nG_BodyList.first->next;
-        } else if (bn == nG_BodyList.last) {
-            nG_BodyList.last = nG_BodyList.last->prev;
-        } else {
-            bn->next->prev = bn->prev;
-            bn->prev->next = bn->next;
-        }
-
-        n_CircularAllocatorFree(&nG_PhyAllocator, bn);
-        *b = NULL;
-    }
-}
-
-void n_Step(float dt)
+void n_PhysicsStep(float dt)
 {
     n_MotionStep(dt);
     n_ResolutionStep();
