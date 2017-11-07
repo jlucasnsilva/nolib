@@ -554,20 +554,22 @@ void n_DrawBodies(n_Camera *restrict cam);
 // ========================================================
 
 
+typedef struct n_IGame n_IGame;
+
 typedef struct {
     float deltaTime;
     float totalTime;
 } n_GameTime;
 
-typedef void (* n_GameEventHandler)(const SDL_Event *restrict e);
-typedef void (* n_GameRuntimeFn)(n_GameTime gameTime);
+typedef void (* n_GameEventHandler)(n_IGame *restrict self, const SDL_Event *restrict e);
+typedef void (* n_GameRuntimeFn)(n_IGame *restrict self, n_GameTime gameTime);
 
-typedef struct {
+struct n_IGame {
     n_GameRuntimeFn    init;
     n_GameRuntimeFn    step;
     n_GameRuntimeFn    finalize;
     n_GameEventHandler ehandler;
-} n_IGame;
+};
 
 
 void n_Quit(void);
@@ -1509,7 +1511,7 @@ void n_Run(uint32_t fps, n_IGame *restrict game)
     uint32_t  delta = 0;
     SDL_Event e;
 
-    game->init(gt);
+    game->init(game, gt);
 
     while (!n_ShouldQuit) {
         curr  = SDL_GetTicks();
@@ -1530,20 +1532,20 @@ void n_Run(uint32_t fps, n_IGame *restrict game)
                     n_ShouldQuit = true;
                     break;
                 default:
-                    game->ehandler(&e);
+                    game->ehandler(game, &e);
                     break;
                 }
             }
 
             gt.deltaTime = Float(delta) / 1000.0f;
             gt.totalTime = Float(curr) / 1000.0f;
-            game->step(gt);
+            game->step(game, gt);
 
             n_Present();
         }
     }
 
-    game->finalize(gt);
+    game->finalize(game, gt);
 }
 
 void n_SetBackgroundColor(const SDL_Color *restrict color)
