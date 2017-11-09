@@ -523,6 +523,9 @@ typedef struct {
 typedef void (* n_CollisionHandlerFn)(n_Collision coll);
 
 
+#define n_CollisionFilter(...) ((n_CollisionFilter) {.mask = 0, .category = 0, __VA_ARGS__})
+
+
 void n_Accelerate(n_Body *restrict body, n_Vec2 acceleration, float dt);
 
 void n_DeleteBody(n_Body **restrict b);

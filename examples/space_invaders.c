@@ -72,6 +72,15 @@ int main(void)
 
 #define USER_EVENT_SPAWN_CODE   1
 
+
+enum {
+    CollFilter_Player     = 1,
+    CollFilter_Diglet     = 1 << 1,
+    CollFilter_PlayerBomb = 1 << 2,
+    CollFilter_DigletBomb = 1 << 3
+};
+
+
 static SDL_Rect SPACE_SHIP_TEX       = SDL_Rect(.x = 0,  .y = 0,  .w = 32, .h = 32);
 static SDL_Rect BOMB_TEX_1           = SDL_Rect(.x = 32, .y = 0,  .w = 32, .h = 32);
 static SDL_Rect BOMB_TEX_2           = SDL_Rect(.x = 64, .y = 0,  .w = 32, .h = 32);
@@ -157,10 +166,13 @@ void EventHandler(n_IGame *restrict game, const SDL_Event *restrict e)
 
 
 typedef struct {
-    int   dir;
-    float x0;
-    float x;
-    float y;
+    n_Body* body;
+    n_Vec2  acceleration;
+
+    int     dir;
+    float   x0;
+    float   x;
+    float   y;
 } DigletInvader;
 
 
@@ -220,6 +232,19 @@ void SpawnInvaders(float y)
     flag = !flag;
 
     for (i = 0; i < 5 && (i + nOfInvaders) < DIGLET_INVADER_MAX_NUM; i++) {
+        invaders[i + nOfInvaders].body = n_NewBody(
+            n_Vec2(.x = x + 2 * i, .y = y),
+            n_Vec2(.x = 1, .y = 1),
+            n_Vec2(.x = 1, .y = 1),
+            n_CollisionFilter(
+                .mask     = CollFilter_Diglet,
+                .category = CollFilter_Player | CollFilter_PlayerBomb
+            ),
+            n_BodyType_Dynamic,
+            0
+        );
+        invaders[i + nOfInvaders].acceleration = n_Vec2(.x = 1.0f, .y = -0.1f);
+
         invaders[i + nOfInvaders].x0  = x + 2 * i;
         invaders[i + nOfInvaders].x   = invaders[i + nOfInvaders].x0;
         invaders[i + nOfInvaders].y   = y;
@@ -264,15 +289,19 @@ typedef struct BulletList BulletList;
 
 struct BulletList {
     BulletList* next;
+    n_Body*     body;
+    n_Vec2      acceleration;
+
     n_Vec2      pos;
     float       dy;
 };
 
 
 static struct {
-    float x;
-    float y;
-    float lastShotT;
+    n_Body* body;
+    float   x;
+    float   y;
+    float   lastShotT;
 } player = {.x = WIN_WIDTH / 2.0f - 0.5f, .y = 1.0f, .lastShotT = 0.0f};
 
 static BulletList bullets = {.next = NULL};
@@ -298,6 +327,18 @@ void Shoot(float x, float y, float dy)
     BulletList* b = n_New(BulletList, 1);
 
     if (b) {
+        b->body = n_NewBody(
+            n_Vec2(.x = x, .y = y),
+            n_Vec2(.x = 1, .y = 1),
+            n_Vec2(.x = 1, .y = 1),
+            n_CollisionFilter(
+                .mask     = CollFilter_PlayerBomb,
+                .category = CollFilter_Diglet | CollFilter_DigletBomb
+            ),
+            n_BodyType_Dynamic,
+            0
+        )
+
         b->dy        = dy;
         b->pos.x     = x;
         b->pos.y     = y;
