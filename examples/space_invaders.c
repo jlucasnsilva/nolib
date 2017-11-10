@@ -28,17 +28,20 @@ void Step(n_IGame *restrict game, n_GameTime gameTime);
 void Finalize(n_IGame *restrict game, n_GameTime gameTime);
 void EventHandler(n_IGame *restrict game, const SDL_Event *restrict e);
 
+void DrawBombs(n_Animation *restrict bombAnim, const n_Camera *restrict cam);
+void Shoot(float x, float y, float dy);
+void UpdateBombs(float dt);
+
 uint32_t SpawnInvadersCallback(uint32_t interval, void* param);
 void SpawnInvaders(float y);
 void UpdateInvaders(n_GameTime gt);
 void DrawInvaders(SDL_Texture* tex, const n_Camera *restrict cam);
 
-void DrawBombs(n_Animation *restrict bombAnim, const n_Camera *restrict cam);
 void DrawPlayer(SDL_Texture* tex, const n_Camera *restrict cam);
-void Shoot(float x, float y, float dy);
-void UpdateBombs(n_Animation *restrict bombAnim, n_GameTime gt);
+void InitPlayer(void);
 void UpdatePlayer(n_GameTime gt);
 
+void MakeWalls(void);
 
 
 int main(void)
@@ -54,6 +57,7 @@ int main(void)
         SDL_Color bg = SDL_Color(.r = 0xFF, .g = 0xFF, .b = 0xFF);
 
         n_SetBackgroundColor(&bg);
+        // n_SetLoaderSearchPath("examples");
 
         n_Run(30, &game.interface);
         n_Finalize();
@@ -77,7 +81,8 @@ enum {
     CollFilter_Player     = 1,
     CollFilter_Diglet     = 1 << 1,
     CollFilter_PlayerBomb = 1 << 2,
-    CollFilter_DigletBomb = 1 << 3
+    CollFilter_DigletBomb = 1 << 3,
+    CollFilter_Wall       = 1 << 4,
 };
 
 
@@ -102,15 +107,19 @@ void Init(n_IGame *restrict game, n_GameTime gameTime)
     g->tex           = n_LoadTexture("space.png");
     g->explosionAnim = n_NewAnimation(g->tex, explositionFrames, 3, 0.1f);
     g->bombAnim      = n_NewAnimation(g->tex, bombFrames, 3, 0.2f);
+    g->spawnTimerID  = SDL_AddTimer(1000, &SpawnInvadersCallback, NULL);
 
     g->explosionAnim->dest = n_Rect(.x = 0, .y = 0, .w = 1.0f, .h = 1.0f);
     g->bombAnim->dest      = n_Rect(.x = 0, .y = 0, .w = 0.5f, .h = 0.5f);
 
-    g->spawnTimerID = SDL_AddTimer(1000, &SpawnInvadersCallback, NULL);
-
     for (float y = WIN_HEIGHT / 2; y < (WIN_HEIGHT - 1); y += 2.0f) {
         SpawnInvaders(y);
     }
+
+    InitPlayer();
+    n_SetVelocityDamping(0.98f);
+
+    MakeWalls();
 
     srand(time(NULL));
 }
@@ -120,15 +129,19 @@ void Step(n_IGame *restrict game, n_GameTime gameTime)
     Game* g = Ptr(game);
 
     n_Animate(g->explosionAnim, gameTime.totalTime);
-    n_DrawAnimation(&g->cam, g->explosionAnim);
+    n_Animate(g->bombAnim, gameTime.totalTime);
 
+    UpdateBombs(gameTime.deltaTime);
     UpdateInvaders(gameTime);
     UpdatePlayer(gameTime);
-    UpdateBombs(g->bombAnim, gameTime);
     
+    n_PhysicsStep(gameTime.deltaTime);
+
+    n_DrawAnimation(&g->cam, g->explosionAnim);
+    n_DrawBodies(&g->cam);
+    DrawBombs(g->bombAnim, &g->cam);
     DrawInvaders(g->tex, &g->cam);
     DrawPlayer(g->tex, &g->cam);
-    DrawBombs(g->bombAnim, &g->cam);
 }
 
 void Finalize(n_IGame *restrict game, n_GameTime gameTime)
@@ -154,6 +167,70 @@ void EventHandler(n_IGame *restrict game, const SDL_Event *restrict e)
 
 // --------------------------------------------------------
 //
+// BOMBS
+//
+// --------------------------------------------------------
+
+
+typedef struct BombList BombList;
+
+struct BombList {
+    BombList* next;
+    n_Body*     body;
+    n_Vec2      acceleration;
+};
+
+
+static BombList bullets = {.next = NULL};
+
+
+void DrawBombs(n_Animation *restrict bombAnim, const n_Camera *restrict cam)
+{
+    for (BombList *b = bullets.next; b; b = b->next) {
+        bombAnim->dest.x = b->body->hitbox.x;
+        bombAnim->dest.y = b->body->hitbox.y;
+        n_DrawAnimation(cam, bombAnim);
+    }
+}
+
+void Shoot(float x, float y, float dy)
+{
+    const float BOMB_ACC = 0.01f;
+    BombList*   b        = n_New(BombList, 1);
+
+    if (b) {
+        b->body = n_NewBody(
+            n_Vec2(.x = x, .y = y),
+            n_Vec2(.x = 0.5f, .y = 0.5f),
+            n_Vec2(.x = 0.1f, .y = 0.1f),
+            n_CollisionFilter(
+                .mask     = CollFilter_PlayerBomb,
+                .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Wall
+            ),
+            n_BodyType_Dynamic,
+            0
+        );
+
+        if (b->body) {
+            b->next         = bullets.next;
+            b->acceleration = n_Vec2(.y = dy * BOMB_ACC);
+            bullets.next    = b;
+        } else {
+            n_Delete(b);
+        }
+    }
+}
+
+void UpdateBombs(float dt)
+{
+    for (BombList *b = bullets.next; b; b = b->next) {
+        n_Accelerate(b->body, b->acceleration, dt);
+    }
+}
+
+
+// --------------------------------------------------------
+//
 // INVADERS
 //
 // --------------------------------------------------------
@@ -168,11 +245,7 @@ void EventHandler(n_IGame *restrict game, const SDL_Event *restrict e)
 typedef struct {
     n_Body* body;
     n_Vec2  acceleration;
-
-    int     dir;
     float   x0;
-    float   x;
-    float   y;
 } DigletInvader;
 
 
@@ -187,10 +260,10 @@ void DrawInvaders(SDL_Texture* tex, const n_Camera *restrict cam)
     for (int i = 0; i < nOfInvaders; i++) {
         DigletInvader* di = &invaders[i];
 
-        d.x = di->x;
-        d.y = di->y;
+        d.x = di->body->hitbox.x;
+        d.y = di->body->hitbox.y;
 
-        if (di->dir > 0) {
+        if (di->acceleration.x > 0) {
             n_DrawTexture(cam, tex, &DIGLET_INVADER_TEX_2, &d, 0.0f, SDL_FLIP_NONE);
         } else {
             n_DrawTexture(cam, tex, &DIGLET_INVADER_TEX_1, &d, 0.0f, SDL_FLIP_NONE);
@@ -200,6 +273,7 @@ void DrawInvaders(SDL_Texture* tex, const n_Camera *restrict cam)
 
 void UpdateInvaders(n_GameTime gt)
 {
+    const float Y_ACC        = 5.0f;
     const float MAX_SHIFT    = 3.0f;
     const int   SHOOT_CHANCE = 2;
     int         chance;
@@ -207,18 +281,19 @@ void UpdateInvaders(n_GameTime gt)
     for (int i = 0; i < nOfInvaders; i++) {
         DigletInvader* di = &invaders[i];
 
-        if (di->dir > 0 && di->x < (di->x0 + MAX_SHIFT)) {
-            di->x += 0.02f;
-        } else if (di->dir < 0 && di->x > di->x0) {
-            di->x -= 0.02f;
+        if (di->body->hitbox.x > (di->x0 + MAX_SHIFT)
+            || di->body->hitbox.x < (di->x0 - MAX_SHIFT)) {
+            di->acceleration.x *= -1;
+            di->acceleration.y = Y_ACC;
         } else {
-            di->y   -= 0.5;
-            di->dir *= -1;
+            di->acceleration.y = 0;
         }
+
+        n_Accelerate(di->body, di->acceleration, gt.deltaTime);
 
         chance = rand() % 1000;
         if (chance <= SHOOT_CHANCE) {
-            Shoot(di->x, di->y, -0.05);
+            Shoot(di->body->hitbox.x, di->body->hitbox.y, -1);
         }
     }
 }
@@ -235,20 +310,17 @@ void SpawnInvaders(float y)
         invaders[i + nOfInvaders].body = n_NewBody(
             n_Vec2(.x = x + 2 * i, .y = y),
             n_Vec2(.x = 1, .y = 1),
-            n_Vec2(.x = 1, .y = 1),
+            n_Vec2(.x = 0.1f, .y = 0.1f),
             n_CollisionFilter(
                 .mask     = CollFilter_Diglet,
-                .category = CollFilter_Player | CollFilter_PlayerBomb
+                .category = CollFilter_Player | CollFilter_PlayerBomb | CollFilter_Wall
             ),
             n_BodyType_Dynamic,
             0
         );
-        invaders[i + nOfInvaders].acceleration = n_Vec2(.x = 1.0f, .y = -0.1f);
 
+        invaders[i + nOfInvaders].acceleration = n_Vec2(.x = 1.0f);
         invaders[i + nOfInvaders].x0  = x + 2 * i;
-        invaders[i + nOfInvaders].x   = invaders[i + nOfInvaders].x0;
-        invaders[i + nOfInvaders].y   = y;
-        invaders[i + nOfInvaders].dir = 1;
     }
 
     nOfInvaders += i;
@@ -279,103 +351,128 @@ uint32_t SpawnInvadersCallback(uint32_t interval, void* param)
 // --------------------------------------------------------
 
 
-#define BULLET_MAX_NUM 100
-
-
 const float SHOOT_COOL_DOWN = 500.0f / 1000.0f;
-
-
-typedef struct BulletList BulletList;
-
-struct BulletList {
-    BulletList* next;
-    n_Body*     body;
-    n_Vec2      acceleration;
-
-    n_Vec2      pos;
-    float       dy;
-};
 
 
 static struct {
     n_Body* body;
-    float   x;
-    float   y;
     float   lastShotT;
-} player = {.x = WIN_WIDTH / 2.0f - 0.5f, .y = 1.0f, .lastShotT = 0.0f};
+} player;
 
-static BulletList bullets = {.next = NULL};
-
-
-void DrawBombs(n_Animation *restrict bombAnim, const n_Camera *restrict cam)
-{
-    for (BulletList *b = bullets.next; b; b = b->next) {
-        bombAnim->dest.x = b->pos.x;
-        bombAnim->dest.y = b->pos.y;
-        n_DrawAnimation(cam, bombAnim);
-    }
-}
 
 void DrawPlayer(SDL_Texture* tex, const n_Camera *restrict cam)
 {
-    n_Rect d = n_Rect(.x = player.x, .y = player.y, .w = 1, .h = 1);
+    n_Rect d = n_Rect(.x = player.body->hitbox.x, .y = player.body->hitbox.y, .w = 1, .h = 1);
     n_DrawTexture(cam, tex, &SPACE_SHIP_TEX, &d, 0.0f, SDL_FLIP_NONE);
 }
 
-void Shoot(float x, float y, float dy)
+void InitPlayer(void)
 {
-    BulletList* b = n_New(BulletList, 1);
+    player.body = n_NewBody(
+        n_Vec2(.x = WIN_WIDTH / 2.0f - 0.5f, .y = 1.0f),
+        n_Vec2(.x = 1.0f, .y = 1.0f),
+        n_Vec2(.x = 0.1f, .y = 0.1f),
+        n_CollisionFilter(
+            .mask     = CollFilter_Player,
+            .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Wall
+        ),
+        n_BodyType_Dynamic,
+        0
+    );
 
-    if (b) {
-        b->body = n_NewBody(
-            n_Vec2(.x = x, .y = y),
-            n_Vec2(.x = 1, .y = 1),
-            n_Vec2(.x = 1, .y = 1),
-            n_CollisionFilter(
-                .mask     = CollFilter_PlayerBomb,
-                .category = CollFilter_Diglet | CollFilter_DigletBomb
-            ),
-            n_BodyType_Dynamic,
-            0
-        )
-
-        b->dy        = dy;
-        b->pos.x     = x;
-        b->pos.y     = y;
-        b->next      = bullets.next;
-        bullets.next = b;
-    }
-}
-
-void UpdateBombs(n_Animation *restrict bombAnim, n_GameTime gt)
-{
-    n_Animate(bombAnim, gt.totalTime);
-
-    for (BulletList *b = bullets.next; b; b = b->next) {
-        b->pos.y += b->dy;
-    }
+    player.lastShotT = 0.0f;
 }
 
 void UpdatePlayer(n_GameTime gt)
 {
-    const uint8_t* ks = SDL_GetKeyboardState(NULL);
-    float          dx = 0.07;
-    float          dy = 0.09f;
+    const float    X_ACC = 0.01f;
+    const float    Y_ACC = 0.01f;
+    const uint8_t* ks  = SDL_GetKeyboardState(NULL);
+    n_Vec2         acc = n_Vec2();
 
-    if (ks[SDL_SCANCODE_UP] && player.y < (WIN_HEIGHT - 2)) {
-        player.y += dy;
-    } else if (ks[SDL_SCANCODE_DOWN] && player.y > 0.5f) {
-        player.y -= dy;
+    if (ks[SDL_SCANCODE_UP]) {
+        acc.y = Y_ACC;
+    } else if (ks[SDL_SCANCODE_DOWN]) {
+        acc.y = -Y_ACC;
+    } else {
+        acc.y = 0.0f;
     }
 
-    if (ks[SDL_SCANCODE_LEFT] && player.x > 0.0f) {
-        player.x -= dx;
-    } else if (ks[SDL_SCANCODE_RIGHT] && player.x < (WIN_WIDTH - 1)) {
-        player.x += dx;
+    if (ks[SDL_SCANCODE_LEFT]) {
+        acc.x = -X_ACC;
+    } else if (ks[SDL_SCANCODE_RIGHT]) {
+        acc.x = X_ACC;
+    } else {
+        acc.x = 0.0f;
     }
 
     if (ks[SDL_SCANCODE_SPACE] && (gt.totalTime - player.lastShotT) >= SHOOT_COOL_DOWN) {
         player.lastShotT = gt.totalTime;
-        Shoot(player.x, player.y, 0.05f);
+        Shoot(player.body->hitbox.x, player.body->hitbox.y, 1);
     }
+
+    n_Accelerate(player.body, acc, gt.deltaTime);
+}
+
+
+// --------------------------------------------------------
+//
+// Wall
+//
+// --------------------------------------------------------
+
+
+void MakeWalls(void)
+{
+    // Left Wall
+    n_NewBody(
+        n_Vec2(.x = -1.0f, .y = 0.0f),
+        n_Vec2(.x =  1.2f, .y = WIN_HEIGHT),
+        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_CollisionFilter(
+            .mask     = CollFilter_Wall,
+            .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
+        ),
+        n_BodyType_Static,
+        0
+    );
+
+    // Right Wall
+    n_NewBody(
+        n_Vec2(.x = WIN_WIDTH - 0.2f, .y = 0.0f),
+        n_Vec2(.x =  1.0f, .y = WIN_HEIGHT),
+        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_CollisionFilter(
+            .mask     = CollFilter_Wall,
+            .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
+        ),
+        n_BodyType_Static,
+        0
+    );
+
+    // Upper Wall
+    n_NewBody(
+        n_Vec2(.x =  0.0f, .y = WIN_HEIGHT * 2.0),
+        n_Vec2(.x =  WIN_WIDTH, .y = 1.0f),
+        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_CollisionFilter(
+            .mask     = CollFilter_Wall,
+            .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
+        ),
+        n_BodyType_Static,
+        0
+    );
+
+    // Bottom Wall
+    n_NewBody(
+        n_Vec2(.x =  0.0f, .y = -1.0f),
+        n_Vec2(.x =  WIN_WIDTH, .y = 1),
+        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_CollisionFilter(
+            .mask     = CollFilter_Wall,
+            .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
+        ),
+        n_BodyType_Static,
+        0
+    );
 }

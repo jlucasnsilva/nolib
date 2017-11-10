@@ -1,6 +1,6 @@
 # No Lib
 
-> What kind of lib throws everythin in the header file?
+> What kind of lib throws everything in the header file?
 > Nolib. Nolib at all.
 >
 > -- Gus Fring

@@ -664,8 +664,8 @@ bool n_MakeCircularAllocator(
         char*                    buff  = Ptr(buffer);
 
         for (int i = 1; i < (bufferSize / objSize); i++) {
-            last = Ptr(&buff[i - 1]);
-            last->next = Ptr(&buff[i]);
+            last       = Ptr(&buff[objSize * (i - 1)]);
+            last->next = Ptr(&buff[objSize * i]);
         }
 
         last->next->next = NULL;
