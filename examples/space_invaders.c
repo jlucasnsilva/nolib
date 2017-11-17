@@ -132,8 +132,11 @@ void Step(n_IGame *restrict game, n_GameTime gameTime)
     n_Animate(g->bombAnim, gameTime.totalTime);
 
     UpdateBombs(gameTime.deltaTime);
+    puts("UpdateBombs(gameTime.deltaTime);");
     UpdateInvaders(gameTime);
+    puts("UpdateInvaders(gameTime);");
     UpdatePlayer(gameTime);
+    puts("UpdatePlayer(gameTime);");
     
     n_PhysicsStep(gameTime.deltaTime);
 
@@ -142,6 +145,8 @@ void Step(n_IGame *restrict game, n_GameTime gameTime)
     DrawBombs(g->bombAnim, &g->cam);
     DrawInvaders(g->tex, &g->cam);
     DrawPlayer(g->tex, &g->cam);
+
+    puts("\n================================================\n");
 }
 
 void Finalize(n_IGame *restrict game, n_GameTime gameTime)
@@ -428,7 +433,7 @@ void MakeWalls(void)
     n_NewBody(
         n_Vec2(.x = -1.0f, .y = 0.0f),
         n_Vec2(.x =  1.2f, .y = WIN_HEIGHT),
-        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_Vec2(.x =  0.1f, .y = 0.1f),
         n_CollisionFilter(
             .mask     = CollFilter_Wall,
             .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
@@ -441,7 +446,7 @@ void MakeWalls(void)
     n_NewBody(
         n_Vec2(.x = WIN_WIDTH - 0.2f, .y = 0.0f),
         n_Vec2(.x =  1.0f, .y = WIN_HEIGHT),
-        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_Vec2(.x =  0.1f, .y = 0.1f),
         n_CollisionFilter(
             .mask     = CollFilter_Wall,
             .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
@@ -454,7 +459,7 @@ void MakeWalls(void)
     n_NewBody(
         n_Vec2(.x =  0.0f, .y = WIN_HEIGHT * 2.0),
         n_Vec2(.x =  WIN_WIDTH, .y = 1.0f),
-        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_Vec2(.x =  0.1f, .y = 0.1f),
         n_CollisionFilter(
             .mask     = CollFilter_Wall,
             .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
@@ -467,7 +472,7 @@ void MakeWalls(void)
     n_NewBody(
         n_Vec2(.x =  0.0f, .y = -1.0f),
         n_Vec2(.x =  WIN_WIDTH, .y = 1),
-        n_Vec2(.x =  0.5f, .y = 0.5f),
+        n_Vec2(.x =  0.1f, .y = 0.1f),
         n_CollisionFilter(
             .mask     = CollFilter_Wall,
             .category = CollFilter_Diglet | CollFilter_DigletBomb | CollFilter_Player | CollFilter_PlayerBomb
