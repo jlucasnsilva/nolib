@@ -208,12 +208,12 @@ void n_Animate(n_Animation *restrict a, float totalTime);
 // TODO
 // Makes the camera follow a certain point. The Camera position
 // is so that <point> is at the center of the screen.
-void n_CameraFollow(n_Camera *restrict cam, n_Vec2 point);
+// void n_CameraFollow(n_Camera *restrict cam, n_Vec2 point);
 
 // TODO
 // Moves the camera so that <point> is within the camera's viewport
 // bounds.
-void n_CameraJail(n_Camera *restrict cam, const n_Rect *restrict cage, n_Vec2 point);
+// void n_CameraJail(n_Camera *restrict cam, const n_Rect *restrict cage, n_Vec2 point);
 
 
 void n_ClearBackground(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
@@ -814,15 +814,11 @@ bool n_Init(const char* gameName, int windowWidth, int windowHeight, float ppm)
     }
 
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
-
-    n_InitPhysics();
     return true;
 }
 
 void n_Finalize(void)
 {
-    n_FinalizePhysics();
-
     SDL_DestroyRenderer(nG_Renderer);
     SDL_DestroyWindow(nG_Window);
 
