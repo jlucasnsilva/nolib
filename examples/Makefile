@@ -9,3 +9,9 @@ test:
 
 space:
 	$(CC) $(CFLAGS) $(LDFLAGS) -o space_invaders.bin space_invaders.c
+
+animation:
+	$(CC) $(CFLAGS) $(LDFLAGS) -o animation.bin animation.c
+
+moving:
+	$(CC) $(CFLAGS) $(LDFLAGS) -o moving.bin moving.c

@@ -60,7 +60,6 @@ int main(void)
         SDL_Color bg = SDL_Color(.r = 0xFF, .g = 0xFF, .b = 0xFF);
 
         n_SetBackgroundColor(&bg);
-        // n_SetLoaderSearchPath("examples");
 
         n_Run(30, &game.interface);
         n_Finalize();
