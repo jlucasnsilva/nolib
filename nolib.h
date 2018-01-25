@@ -752,6 +752,7 @@ void n_Run(uint32_t fps, n_IGame *restrict game)
 
             gt.deltaTime = Float(delta) / 1000.0f;
             gt.totalTime = Float(curr) / 1000.0f;
+            prev = curr;
             game->step(game, gt);
 
             n_Present();
