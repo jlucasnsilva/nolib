@@ -191,6 +191,15 @@ typedef struct {
     __VA_ARGS__                              \
 })
 
+#define n_Sprite(...) ((n_Sprite) { \
+    .tex   = NULL,                  \
+    .src   = SDL_Rect(),            \
+    .dest  = n_Rect(),              \
+    .angle = 0.0f,                  \
+    .flip  = SDL_FLIP_NONE,         \
+    __VA_ARGS__                     \
+})
+
 #define n_Camera(...) ((n_Camera) { \
     .center       = n_Vec2(),       \
     .acceleration = n_Vec2(),       \
@@ -626,7 +635,7 @@ SDL_Rect n_Unproject(const n_Camera *restrict cam, const n_Rect *restrict r)
 #define nG_BaseLoaderPathMaxLen 255
 
 
-static char nG_BaseLoaderPath[nG_BaseLoaderPathMaxLen + 1];
+static char nG_BaseLoaderPath[nG_BaseLoaderPathMaxLen + 1] = "";
 
 
 SDL_Texture* n_LoadTexture(const char *restrict path)
