@@ -7,8 +7,9 @@ all: test space
 test:
 	$(CC) $(CFLAGS) $(LDFLAGS) -o test.bin test.c
 
-space:
-	$(CC) $(CFLAGS) $(LDFLAGS) -o space_invaders.bin space_invaders.c
+# TODO fix this example
+#space:
+#	$(CC) $(CFLAGS) $(LDFLAGS) -o space_invaders.bin space_invaders.c
 
 animation:
 	$(CC) $(CFLAGS) $(LDFLAGS) -o animation.bin animation.c
